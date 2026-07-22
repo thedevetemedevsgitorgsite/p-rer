@@ -17,7 +17,7 @@ export default {
 
     try {
       const BASE    = "https://fgglquyepbbzrdzmkpfd.supabase.co/rest/v1";
-      const API_KEY = env.SUPABASE_API; // set in Worker secrets
+      const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZnZ2xxdXllcGJienJkem1rcGZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwOTkyMjksImV4cCI6MjA3NDY3NTIyOX0.mT03kocvd2gMLu6y4VeYXQqcBKUPD5DKtku6HrRO7cA"; // set in Worker secrets
 
       // 1. Fetch post
       const postRes = await fetch(
@@ -105,14 +105,21 @@ export default {
         set('product:price:currency', 'NGN');
       }
 
-      return new Response(html, {
-        status:  response.status,
-        headers: response.headers,
-      });
+      const newHeaders = new Headers(response.headers);
+newHeaders.delete('content-length');
+newHeaders.delete('content-encoding');    // or set to 'identity'
+newHeaders.set('content-type', 'text/html; charset=utf-8');
+
+return new Response(html, {
+  status: response.status,
+  headers: newHeaders
+});
 
     } catch (err) {
+    console.log("I log this: ", err)
       // Never break the real page
       return response;
     }
   }
 };
+
