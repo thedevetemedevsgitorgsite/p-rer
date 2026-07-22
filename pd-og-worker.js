@@ -1,171 +1,133 @@
-/**
- * Cloudflare Worker: Server-side OG/Twitter meta + schema.org injection
- * for /p?id=... product pages on DevTemple.
- *
- * Bind this worker to: https://devtem.org/p*
- * Env Vars:
- *   SUPABASE_URL
- *   SUPABASE_ANON_KEY
- */
+// Cloudflare Worker: Edge Meta Injector & Caching for DevTemple Products
+
+const ORIGIN_URL = "https://your-upstream-origin.com"; // e.g., Netlify/Vercel deployment URL or origin host
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const productId = url.searchParams.get("id");
 
-    // 1. Only process product detail page requests
-    if (url.pathname !== '/p') {
+    // If no product ID is present, pass directly through to origin
+    if (!productId) {
       return fetch(request);
     }
 
-    const productId = url.searchParams.get('id');
-    const originResponse = await fetch(request);
+    // Initialize Cloudflare Default Cache
+    const cache = caches.default;
+    const cacheKey = new Request(url.toString(), request);
+    let response = await cache.match(cacheKey);
 
-    // 2. Early return if missing ID or response isn't HTML
-    const contentType = originResponse.headers.get('content-type') || '';
-    if (!productId || !contentType.includes('text/html')) {
-      return originResponse;
+    if (response) {
+      return response;
     }
 
     try {
-      const { SUPABASE_URL, SUPABASE_ANON_KEY } = env;
+      // Access Supabase Credentials via Environment Variables (env)
+      const supabaseUrl = env.SUPABASE_URL;
+      const supabaseKey = env.SUPABASE_ANON_KEY;
 
-      const cache = caches.default;
-      const cacheKey = new Request(`https://cache.internal/og-meta/${productId}`);
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables.");
+      }
 
-      let product = null;
-      const cached = await cache.match(cacheKey);
-
-      // Safe Cache Extraction (Prevents "Unexpected end of JSON input" errors)
-      if (cached) {
-        try {
-          product = await cached.json();
-        } catch (_) {
-          product = null; // Cache hit was corrupted/empty; fall back to API query
+      // 1. Fetch Product Data from Supabase REST API
+      const dbUrl = `${supabaseUrl}/rest/v1/posts?id=eq.${encodeURIComponent(productId)}&select=id,name,description,price,cover,user_id,created_at,sponsored,labels`;
+      const dbRes = await fetch(dbUrl, {
+        headers: {
+          "apikey": supabaseKey,
+          "Authorization": `Bearer ${supabaseKey}`,
+          "Accept": "application/json"
         }
+      });
+
+      if (!dbRes.ok) {
+        throw new Error(`Supabase query failed with status: ${dbRes.status}`);
       }
 
-      // Fetch from Supabase if not cached
+      const products = await dbRes.json();
+      const product = products[0];
+
+      // 2. Fetch Base HTML from Origin (Netlify/Server)
+      const originRes = await fetch(`${ORIGIN_URL}${url.pathname}${url.search}`, {
+        headers: request.headers
+      });
+
+      if (!originRes.ok) {
+        return originRes;
+      }
+
+      // If product doesn't exist, return original HTML unmodified
       if (!product) {
-        const res = await fetch(
-          `${SUPABASE_URL}/rest/v1/posts?id=eq.${encodeURIComponent(productId)}` +
-            `&select=id,name,description,price,cover,created_at,labels`,
-          {
-            headers: {
-              apikey: SUPABASE_ANON_KEY,
-              Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            },
-          }
-        );
-
-        if (!res.ok) return originResponse;
-
-        const rows = await res.json();
-        product = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
-        if (!product) return originResponse;
-
-        // Cache for 15 minutes
-        const cacheResponse = new Response(JSON.stringify(product), {
-          headers: {
-            'content-type': 'application/json',
-            'cache-control': 'max-age=900',
-          },
-        });
-        ctx.waitUntil(cache.put(cacheKey, cacheResponse));
+        return originRes;
       }
 
-      // Do not preview hidden/private products
-      const visibility = product.labels?.visibility;
-      if (visibility === 'hidden' || visibility === 'private') {
-        return originResponse;
-      }
+      // 3. Prepare Metadata & Schema Data
+      const cleanTitle = escapeHtml(product.name || "Digital Asset");
+      const cleanDesc = escapeHtml((product.description || "").slice(0, 160).replace(/\n/g, " "));
+      const coverImg = product.cover || "https://devtem.org/assets/images/og.jpg";
+      const isFree = product.price === 0 || product.price === null;
+      const formattedPrice = isFree ? "0.00" : Number(product.price).toFixed(2);
+      const productUrl = `https://devtem.org/p?id=${product.id}`;
 
-      // Format Meta Content
-      const title = `${product.name} — DevTemple`;
-      const rawDesc = (product.description || '').replace(/\s+/g, ' ').trim();
-      const desc = rawDesc.length > 160 ? rawDesc.slice(0, 157) + '...' : rawDesc;
-      const image = product.cover || 'https://devtem.org/assets/images/og.jpg';
-      const pageUrl = `https://devtem.org/p?id=${product.id}`;
-      const isFree = !product.price || product.price === 0;
-
-      // Build Schema.org Structured Data
-      const schema = {
-        '@context': 'https://schema.org/',
-        '@type': 'Product',
-        name: product.name,
-        description: desc,
-        image,
-        offers: {
-          '@type': 'Offer',
-          url: pageUrl,
-          priceCurrency: 'NGN',
-          price: isFree ? 0 : product.price,
-          availability: 'https://schema.org/InStock',
-        },
+      // Schema.org Product Payload
+      const jsonLdPayload = {
+        "@context": "https://schema.org/",
+        "@type": "Product",
+        "name": product.name,
+        "image": [coverImg],
+        "description": product.description ? product.description.slice(0, 300) : "",
+        "sku": product.id,
+        "offers": {
+          "@type": "Offer",
+          "url": productUrl,
+          "priceCurrency": "NGN",
+          "price": formattedPrice,
+          "availability": "https://schema.org/InStock",
+          "itemCondition": "https://schema.org/NewCondition"
+        }
       };
 
-      // Escape angle brackets so JSON doesn't break HTML parsing
-      const safeJsonLd = JSON.stringify(schema).replace(/</g, '\\u003c');
-
-      // Flags to avoid duplicate tags
-      let hasOgUrl = false;
-      let hasCanonical = false;
-
+      // 4. Transform HTML via HTMLRewriter at Edge
       const rewriter = new HTMLRewriter()
-        .on('title#meta-title', {
-          element(el) { el.setInnerContent(title); },
-        })
-        .on('meta#meta-description', {
-          element(el) { el.setAttribute('content', desc); },
-        })
-        .on('meta#og-title', {
-          element(el) { el.setAttribute('content', title); },
-        })
-        .on('meta#og-description', {
-          element(el) { el.setAttribute('content', desc); },
-        })
-        .on('meta#og-image', {
-          element(el) { el.setAttribute('content', image); },
-        })
-        .on('meta[property="og:url"]', {
-          element(el) {
-            hasOgUrl = true;
-            el.setAttribute('content', pageUrl);
-          },
-        })
-        .on('meta#twitter-title', {
-          element(el) { el.setAttribute('content', title); },
-        })
-        .on('meta#twitter-description', {
-          element(el) { el.setAttribute('content', desc); },
-        })
-        .on('meta#twitter-image', {
-          element(el) { el.setAttribute('content', image); },
-        })
-        .on('link[rel="canonical"]', {
-          element(el) {
-            hasCanonical = true;
-            el.setAttribute('href', pageUrl);
-          },
-        })
-        .on('head', {
-          element(el) {
-            // Append og:url & canonical ONLY if missing from origin template
-            if (!hasOgUrl) {
-              el.append(`<meta property="og:url" content="${pageUrl}">`, { html: true });
-            }
-            if (!hasCanonical) {
-              el.append(`<link rel="canonical" href="${pageUrl}">`, { html: true });
-            }
-            // Append JSON-LD Structured Data
-            el.append(`<script type="application/ld+json">${safeJsonLd}</script>`, { html: true });
-          },
+        .on("title#meta-title", { element(e) { e.setInnerContent(`${cleanTitle} — DevTemple`); } })
+        .on("meta#meta-description", { element(e) { e.setAttribute("content", cleanDesc); } })
+        .on("meta#og-title", { element(e) { e.setAttribute("content", cleanTitle); } })
+        .on("meta#og-description", { element(e) { e.setAttribute("content", cleanDesc); } })
+        .on("meta#og-image", { element(e) { e.setAttribute("content", coverImg); } })
+        .on("meta[property='og:url']", { element(e) { e.setAttribute("content", productUrl); } })
+        .on("meta#twitter-title", { element(e) { e.setAttribute("content", cleanTitle); } })
+        .on("meta#twitter-description", { element(e) { e.setAttribute("content", cleanDesc); } })
+        .on("meta#twitter-image", { element(e) { e.setAttribute("content", coverImg); } })
+        .on("head", {
+          element(e) {
+            e.append(`<script type="application/ld+json">${JSON.stringify(jsonLdPayload)}</script>`, { html: true });
+          }
         });
 
-      return rewriter.transform(originResponse);
+      const modifiedRes = rewriter.transform(originRes);
+      
+      response = new Response(modifiedRes.body, modifiedRes);
+      response.headers.set("Content-Type", "text/html; charset=UTF-8");
+      response.headers.set("Cache-Control", "public, max-age=900, s-maxage=900");
+
+      ctx.waitUntil(cache.put(cacheKey, response.clone()));
+
+      return response;
+
     } catch (err) {
-      // Graceful fallback to origin HTML on failure
-      return originResponse;
+      console.error("Worker Edge Execution Error:", err);
+      // Fallback: Return standard origin HTML on errors/limits
+      return fetch(request);
     }
-  },
+  }
 };
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
