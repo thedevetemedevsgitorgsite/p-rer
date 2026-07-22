@@ -1,0 +1,9 @@
+name = "devtemple-og-worker"
+main = "pd-og-worker.js"
+compatibility_date = "2026-07-01"
+
+routes = [
+  { pattern = "devtem.org/p*", zone_name = "devtem.org" }
+]
+
+[vars]
