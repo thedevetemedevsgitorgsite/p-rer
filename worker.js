@@ -16,12 +16,12 @@ export default {
     if (!isBot) return response;
 
     try {
-      const BASE    = "https://fgglquyepbbzrdzmkpfd.supabase.co";
+      const BASE    = "https://fgglquyepbbzrdzmkpfd.supabase.co/rest/v1";
       const API_KEY = env.SUPABASE_API; // set in Worker secrets
 
       // 1. Fetch post
       const postRes = await fetch(
-        `${BASE}/posts?id=eq.${id}&select=id,name,description,price,cover,sales,star,sponsored,labels,user_id,created_at,cta_text`,
+        `${BASE}/posts?id=eq.${id}&select=*`,
         { headers: { apikey: API_KEY, Authorization: `Bearer ${API_KEY}` } }
       );
       const posts = await postRes.json();
@@ -30,7 +30,7 @@ export default {
 
       // 2. Fetch author profile
       const profRes = await fetch(
-        `${BASE}/profiles?id=eq.${post.user_id}&select=full_name,username,status,plan`,
+        `${BASE}/profiles?id=eq.${post.user_id}&select=*`,
         { headers: { apikey: API_KEY, Authorization: `Bearer ${API_KEY}` } }
       );
       const profiles = await profRes.json();
