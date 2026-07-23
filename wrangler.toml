@@ -6,3 +6,14 @@ compatibility_date = "2026-01-01"
 pattern = "devtem.org/p*"
 zone_name = "devtem.org"
 
+[[routes]]
+pattern = "devtem.org/s*"
+zone_name = "devtem.org"
+
+[[routes]]
+pattern = "*.devtem.org/s*"
+zone_name = "devtem.org"
+
+[[routes]]
+pattern = "*.devtem.org/p*"
+zone_name = "devtem.org"
