@@ -11,9 +11,9 @@ pattern = "devtem.org/s*"
 zone_name = "devtem.org"
 
 [[routes]]
-pattern = "*.devtem.org/s*"
+pattern = "www.devtem.org/s*"
 zone_name = "devtem.org"
 
 [[routes]]
-pattern = "*.devtem.org/p*"
+pattern = "www.devtem.org/p*"
 zone_name = "devtem.org"
