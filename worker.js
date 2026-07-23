@@ -11,7 +11,7 @@ export default {
     
     // ── Helpers ──────────────────────────────────────────────────────────────
     const BASE = "https://fgglquyepbbzrdzmkpfd.supabase.co/rest/v1";
-    const API_KEY = "your supabase apiKey";
+    const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZnZ2xxdXllcGJienJkem1rcGZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwOTkyMjksImV4cCI6MjA3NDY3NTIyOX0.mT03kocvd2gMLu6y4VeYXQqcBKUPD5DKtku6HrRO7cA";
     
     const headers = {
       apikey: API_KEY,
@@ -136,7 +136,7 @@ export default {
         
         // Build OG values
         const displayName = profile.full_name || profile.username || 'Creator';
-        const title = `${displayName} — DevTemple`;
+        const title = `Check out ${displayName.slice(0,15)} profile on DevTemple`;
         const bio = profile.bio ? `${profile.bio.slice(0, 120)}` : 'Explore creator profile on DevTemple';
         const statLine = `${totalPosts} products · ${totalSales} sales · ${totalLikes} likes`;
         const desc = `${bio} | ${statLine}`;
