@@ -11,7 +11,7 @@ export default {
     
     // ── Helpers ──────────────────────────────────────────────────────────────
     const BASE = "https://fgglquyepbbzrdzmkpfd.supabase.co/rest/v1";
-    const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZnZ2xxdXllcGJienJkem1rcGZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwOTkyMjksImV4cCI6MjA3NDY3NTIyOX0.mT03kocvd2gMLu6y4VeYXQqcBKUPD5DKtku6HrRO7cA";
+    const API_KEY = "your supabase apiKey";
     
     const headers = {
       apikey: API_KEY,
