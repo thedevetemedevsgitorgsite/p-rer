@@ -136,7 +136,7 @@ export default {
         
         // Build OG values
         const displayName = profile.full_name || profile.username || 'Creator';
-        const title = `Check out ${displayName.slice(0,15)} profile on DevTemple`;
+        const title = `${displayName.slice(0,15)} on DevTemple`;
         const bio = profile.bio ? `${profile.bio.slice(0, 120)}` : 'Explore creator profile on DevTemple';
         const statLine = `${totalPosts} products · ${totalSales} sales · ${totalLikes} likes`;
         const desc = `${bio} | ${statLine}`;
